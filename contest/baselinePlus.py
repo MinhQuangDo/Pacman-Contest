@@ -124,51 +124,76 @@ class ReflexCaptureAgent(CaptureAgent):
           if coorNeighbor not in visited and coorNeighbor in legalPositions:
             fringes.push((coorNeighbor, currentPath + [action]), self.getMazeDistance(coorNeighbor, goal))
     return []
-
+    
+    
+    
+    
 class OffensiveReflexAgent(ReflexCaptureAgent):
+    
   """
   A reflex agent that seeks food. This is an agent
   we give you to get an idea of what an offensive agent might look like,
   but it is by no means the best or only way to build an offensive agent.
   """
+    
   def getFeatures(self, gameState, action):
     features = util.Counter()
     successor = self.getSuccessor(gameState, action)
 
     myState = successor.getAgentState(self.index)
     myPos = myState.getPosition()
-
+    foodList = self.getFood(successor).asList()
     features['successorScore'] = self.getScore(successor)
-
-    # Compute distance to nearest protector that has small scare time 
+    
+    # features['successorScore'] = -len(foodList)
+    
+    # Compute distance to the nearest food
+   
+    if len(foodList) > 0: # This should always be True,  but better safe than sorry
+      minDistanceToFood = min([self.getMazeDistance(myPos, food) for food in foodList])
+      features['distanceToFood'] = minDistanceToFood
+    
+    if action == Directions.STOP: 
+      features['stop'] = 1
+    else:
+      features['stop'] = 0
+    rev = Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]
+    if action == rev: 
+      features['reverse'] = 1
+    else:
+      features['reverse'] = 0
+    
+    
+    features['closeProtector'] = 0  
+    # Compute distance to nearest protector 
     enemies = [successor.getAgentState(i) for i in self.getOpponents(successor)]
     protectors = [a for a in enemies if not a.isPacman and a.getPosition() != None and a.scaredTimer <= 3]
     if len(protectors) > 0:
       dists = [self.getMazeDistance(myPos, a.getPosition()) for a in protectors]
-      features['protectorDistance'] = min(dists)
-
-    # Compute distance to the nearest food
-    foodList = self.getFood(successor).asList()
-    if len(foodList) > 0: # This should always be True,  but better safe than sorry
-      minDistanceToFood = min([self.getMazeDistance(myPos, food) for food in foodList])
-      features['distanceToFood'] = minDistanceToFood
-      
+      features['distanceToProtector'] = min(dists)
+      nearestProtector = [a for a, v in zip(protectors, dists) if v == min(dists)]
+      for d in dists:
+        if d <= 1:
+          features['closeProtector'] = 1
+          break        
+    
     # Compute distance to the nearest capsule
-    # capsuleList = self.getCapsules(successor)
-    # if len(capsuleList) > 0:
-    #   features['capsulePresented'] = 1
-    #   minDistanceToCapsule = min([self.getMazeDistance(myPos, cap) for cap in capsuleList])
-    #   features['distanceToCapsule'] = minDistanceToCapsule
+    capsuleList = self.getCapsules(successor)
+    if len(capsuleList) > 0:
+      # features['capsulePresent'] = 1
+      minDistanceToCapsule = min([self.getMazeDistance(myPos, cap) for cap in capsuleList])
+      if features['closeProtector'] == 0:
+        features['distanceToCapsule'] = minDistanceToCapsule
+      else:
+        features['distanceToCapsule'] = minDistanceToCapsule * 5
 
-    if action == Directions.STOP: features['stop'] = 1
-    rev = Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]
-    if action == rev: features['reverse'] = 1
+    
 
-      
     return features
 
   def getWeights(self, gameState, action):
-    return {'successorScore': 100, 'distanceToFood': -2, 'protectorDistance': 10, 'stop': -100, 'reverse': -2}
+    return {'successorScore': 100, 'distanceToFood': -2, 'distanceToProtector': 1, \
+      'distanceToCapsule': -2, 'closeProtector': -200,'stop': -300, 'reverse': -2}
 
 class DefensiveReflexAgent(ReflexCaptureAgent):
   def __init__(self, index):
